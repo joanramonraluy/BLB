@@ -114,3 +114,27 @@ echo
 echo "${negreta}Posada en marxa dels contenidors"
 echo "${normal}Engegant contenidors..."
 
+for d in "${llista_contenidors_aturats_correctament[@]}"; do
+  lxc-start -n $d 
+done
+
+
+declare espera=10
+for d in "${llista_contenidors_aturats_correctament[@]}"; do
+  nom=`basename $d`
+  contenidor=`ps xaf | grep lxc | grep $nom`
+  if [ -z "$contenidor" ] and [espera]; then
+    echo "El contenidor ${negreta}$nom${normal} s'ha engegat correctament"
+  else
+    sleep 1s
+    echo "$espera seg Esperant a les engegades dels contenidors..."
+    let "espera --"
+  fi
+done
+
+
+echo
+echo "Procés finalitzat"
+echo "${negreta}Posada en marxa dels contenidors"
+echo "${normal}Engegant contenidors..."
+
