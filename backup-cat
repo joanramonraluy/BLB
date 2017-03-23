@@ -1,0 +1,116 @@
+#!/bin/bash
+# Script que realitza les còpies de seguretat dels contenidors LXC
+
+negreta=$(tput bold)
+normal=$(tput sgr0)
+clear
+echo 
+echo "${negreta}Realització de les còpies de seguretat dels contenidors LXC"
+echo "${negreta}-----------------------------------------------------------"
+echo "${normal}"
+
+
+#Fase 1: Parem els contenidors que estan en marxa
+
+#Passem en una variable la ubiació dels contenidors
+LXCDIR='/var/lib/lxc'
+#Inicialitzem variables contador arrays
+declare j=0
+declare k=0
+declare l=0
+echo "La ubicació establerta pels contenidors és: ${negreta}$LXCDIR${normal}"
+echo
+echo "${negreta}Llista contenidors${normal}"
+lxc-ls -f
+echo
+echo
+echo "${negreta}Aturant contenidors${normal}"
+echo "Registrant contenidors en marxa..."
+echo
+
+#Per cada contenidor primer comprova si està en marxa, si és així llavors l'atura
+for d in $LXCDIR/*; do
+  rootfs=$d/rootfs
+  
+  if [ ! -d $rootfs ]; then
+    continue
+  fi
+  
+  nom=`basename $d`
+  contenidor=`ps xaf | grep lxc | grep $nom`
+  
+  if [ -z "$contenidor" ]; then
+    echo "El contenidor ${negreta}$nom${normal} ja estava aturat"
+    estat="no_funcionant"
+    llista_contenidors_estaven_aturats[$j]="$nom"
+    let j++
+  else
+    echo "El contenidor ${negreta}$nom${normal} es trova en funcionament"
+    estat="funcionant"
+  fi
+
+  if [[ "$estat" == "funcionant" ]]; then
+    echo "Aturant el contenidor ${negreta}$nom...${normal}"
+    lxc-stop -n $nom
+    contenidor=`ps xaf | grep lxc | grep $nom`
+    if [ -n "$contenidor" ]; then
+        echo "El contenidor ${negreta}$nom${normal} s'ha aturat correctament"
+        llista_contenidors_aturats_correctament[$k]="$nom"
+        let "k++"
+    else 
+        echo "${negreta}Hi ha hagut un error aturant el contenidor $nom!!"
+        echo "${negreta}Procés de còpia del contenidor $nom CANCELAT!!"
+        echo "${normal}"
+        llista_contenidors_error_al_aturar[$l]="$nom"
+        let "l++"
+    fi
+  fi
+done
+echo
+echo
+echo "${negreta}Resum de les aturades${normal}"
+echo "Llista contenidors aturats correctament:${negreta}"
+printf '%s\n' "${llista_contenidors_aturats_correctament[*]}"  
+echo "${normal}Llista contenidors que ja estaven aturats:${negreta}"
+printf '%s\n%s\n' "${llista_contenidors_estaven_aturats[*]}" 
+echo "${normal}Llista contenidors que no s'han aturat correctament:${negreta}"
+printf '%s\n' "${llista_contenidors_error_al_aturar[*]}"
+
+
+#Fase 2: Fem snapshots de tots els contenidors 
+echo
+echo "${negreta}Snapshots dels contenidors"
+echo "${normal}Creant snaphots..."
+
+for d in $LXCDIR/*; do
+  rootfs=$d/rootfs
+  if [ ! -d $rootfs ]; then
+    continue
+  fi
+  nom=`basename $d`
+  lxc-snapshot -n $nom
+  sync
+  btrfs sub sync $LXCDIR/$nom
+  sync
+  echo "Snapshot del contenidor ${negreta}$nom${normal} creat"
+done
+
+
+#Fase 3: Fem els backups amb Borg
+echo
+echo "${negreta}Backups dels contenidors"
+echo "${normal}Creant i enviant les còpies de seguretat..."
+
+LOCAL=$(hostname --short)
+REMOT=infla@10.52.200.99:/mnt/backups/$LOCAL
+HOST=$(hostname)
+DATA=$(date +%y-%m-%d)
+
+borg create -v --stats --progress $REMOT::$HOST-$DATA $LXCDIR
+borg prune -v --list --keep-daily=7 --keep-weekly=8 --keep-monthly=12 $REMOT
+
+#Fase 4: Posada en marxa dels contenidors
+echo
+echo "${negreta}Posada en marxa dels contenidors"
+echo "${normal}Engegant contenidors..."
+
