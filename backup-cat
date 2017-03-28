@@ -1,6 +1,5 @@
 #!/bin/bash
 # Script que realitza les còpies de seguretat dels contenidors LXC
-
 negreta=$(tput bold)
 normal=$(tput sgr0)
 clear
@@ -10,25 +9,32 @@ echo "${negreta}-----------------------------------------------------------"
 echo "${normal}"
 
 
-#Fase 1: Parem els contenidors que estan en marxa
-
 #Passem en una variable la ubiació dels contenidors
 LXCDIR='/var/lib/lxc'
+#Passem en una variable la ubicació per defecte dels logs
+LOGSPATH='/home/joanramon/Escriptori'
+#Data actual
+DATA=$(date +%y-%m-%d)
+#Creem el fitxer pels logs
+echo LOG DE LES CÒPIES DE SEGURETAT DEL DIA $DATA>> $LOGSPATH/$DATA.log
 #Inicialitzem variables contador arrays
 declare j=0
 declare k=0
 declare l=0
+declare m=0
 echo "La ubicació establerta pels contenidors és: ${negreta}$LXCDIR${normal}"
 echo
 echo "${negreta}Llista contenidors${normal}"
 lxc-ls -f
 echo
+
+#Fase 1: Parem els contenidors que estan en marxa
 echo
+echo Apagada dels contenidors >> $LOGSPATH/$DATA.log
 echo "${negreta}Aturant contenidors${normal}"
 echo "Registrant contenidors en marxa..."
 echo
 
-#Per cada contenidor primer comprova si està en marxa, si és així llavors l'atura
 for d in $LXCDIR/*; do
   rootfs=$d/rootfs
   
@@ -38,7 +44,6 @@ for d in $LXCDIR/*; do
   
   nom=`basename $d`
   contenidor=`ps xaf | grep lxc | grep $nom`
-  
   if [ -z "$contenidor" ]; then
     echo "El contenidor ${negreta}$nom${normal} ja estava aturat"
     estat="no_funcionant"
@@ -49,37 +54,72 @@ for d in $LXCDIR/*; do
     estat="funcionant"
   fi
 
+  declare espera=10
   if [[ "$estat" == "funcionant" ]]; then
     echo "Aturant el contenidor ${negreta}$nom...${normal}"
-    lxc-stop -n $nom
+    echo Logs del contenidor $nom al apagar-se: >> $LOGSPATH/$DATA.log
+    lxc-stop -n $nom -W -l warn -o $LOGSPATH/$DATA.log
     contenidor=`ps xaf | grep lxc | grep $nom`
+    while  [ "$espera" -ge 1 ]; do
+        if [ -z "$contenidor" ]; then
+          echo "El contenidor ${negreta}$nom${normal} s'ha aturat correctament"
+          llista_contenidors_aturats_correctament[$k]="$nom"
+          let k++
+          espera=-1
+        else 
+          echo "Esperant l'apagada del contenidor: "$espera"seg..."
+          sleep 1
+          let espera--
+        fi  
+        contenidor=`ps xaf | grep lxc | grep $nom`
+    done      
     if [ -n "$contenidor" ]; then
-        echo "El contenidor ${negreta}$nom${normal} s'ha aturat correctament"
-        llista_contenidors_aturats_correctament[$k]="$nom"
-        let "k++"
-    else 
-        echo "${negreta}Hi ha hagut un error aturant el contenidor $nom!!"
-        echo "${negreta}Procés de còpia del contenidor $nom CANCELAT!!"
-        echo "${normal}"
-        llista_contenidors_error_al_aturar[$l]="$nom"
-        let "l++"
+        echo "${negreta}Forçant l'apagada del contenidor $nom!!"
+        echo Logs del contenidor $nom forçat a apagar-se: >> $LOGSPATH/$DATA.log
+        lxc-stop -n $nom -t 1 -l info -o $LOGSPATH/$DATA.log
+        contenidor=`ps xaf | grep lxc | grep $nom`
+        if [ -z "$contenidor" ]; then 
+            echo "${negreta}S'ha hagut de forçar l'apagada del contenidor $nom"
+            echo "${negreta}Consultar el fitxer $LOGSPATH/$DATA.log per més informació"
+            echo "${normal}"
+            llista_contenidors_error_al_aturar[$l]="$nom"
+            let l++
+        else
+            echo "No s'ha pogut apagar el contindor $nom!!"
+            echo "${negreta}Consultar el fitxer $LOGSPATH/$DATA.log per més informació"
+            llista_contenidors_no_aturats[$m]="$nom"
+            let m++
+        fi
     fi
   fi
 done
+
 echo
 echo
 echo "${negreta}Resum de les aturades${normal}"
-echo "Llista contenidors aturats correctament:${negreta}"
-printf '%s\n' "${llista_contenidors_aturats_correctament[*]}"  
+echo Resum de les aturades >> $LOGSPATH/$DATA.log
 echo "${normal}Llista contenidors que ja estaven aturats:${negreta}"
-printf '%s\n%s\n' "${llista_contenidors_estaven_aturats[*]}" 
-echo "${normal}Llista contenidors que no s'han aturat correctament:${negreta}"
+echo Llista contenidors que ja estaven aturats: >> $LOGSPATH/$DATA.log
+printf '%s\n' "${llista_contenidors_estaven_aturats[*]}" 
+printf '%s\n' "${llista_contenidors_estaven_aturats[*]}" >> $LOGSPATH/$DATA.log
+echo "${normal}Llista contenidors aturats correctament:${negreta}"
+echo Llista contenidors aturats correctament: >> $LOGSPATH/$DATA.log
+printf '%s\n' "${llista_contenidors_aturats_correctament[*]}"
+printf '%s\n' "${llista_contenidors_aturats_correctament[*]}" >> $LOGSPATH/$DATA.log
+echo "${normal}Llista contenidors forçats a aturar-se:${negreta}"
+echo Llista contenidors forçats a aturar-se: >> $LOGSPATH/$DATA.log
 printf '%s\n' "${llista_contenidors_error_al_aturar[*]}"
+printf '%s\n' "${llista_contenidors_error_al_aturar[*]}" >> $LOGSPATH/$DATA.log
+echo "${normal}Llista contenidors que no s'han pogut aturar:${negreta}"
+echo Llista contenidors no aturats: >> $LOGSPATH/$DATA.log
+printf '%s\n' "${llista_contenidors_no_aturats[*]}"
+printf '%s\n' "${llista_contenidors_no_aturats[*]}" >> $LOGSPATH/$DATA.log
 
 
 #Fase 2: Fem snapshots de tots els contenidors 
 echo
 echo "${negreta}Snapshots dels contenidors"
+echo Snapshots dels contenidors >> $LOGSPATH/$DATA.log
 echo "${normal}Creant snaphots..."
 
 for d in $LXCDIR/*; do
@@ -88,15 +128,16 @@ for d in $LXCDIR/*; do
     continue
   fi
   nom=`basename $d`
-  lxc-snapshot -n $nom
+  echo Logs del contenidor $nom fent els snapshots: >> $LOGSPATH/$DATA.log
+  lxc-snapshot -n $nom -l warn -o $LOGSPATH/$DATA.log
   sync
   btrfs sub sync $LXCDIR/$nom
   sync
   echo "Snapshot del contenidor ${negreta}$nom${normal} creat"
 done
 
-
-#Fase 3: Fem els backups amb Borg
+#Fase3: Fem els Backups amb el Borg
+: 'Comentat
 echo
 echo "${negreta}Backups dels contenidors"
 echo "${normal}Creant i enviant les còpies de seguretat..."
@@ -108,33 +149,61 @@ DATA=$(date +%y-%m-%d)
 
 borg create -v --stats --progress $REMOT::$HOST-$DATA $LXCDIR
 borg prune -v --list --keep-daily=7 --keep-weekly=8 --keep-monthly=12 $REMOT
+'
 
 #Fase 4: Posada en marxa dels contenidors
+i=0
+j=0
 echo
 echo "${negreta}Posada en marxa dels contenidors"
-echo "${normal}Engegant contenidors..."
+echo Engegada dels contenidors >> $LOGSPATH/$DATA.log
 
-for d in "${llista_contenidors_aturats_correctament[@]}"; do
-  lxc-start -n $d 
-done
-
-
-declare espera=10
 for d in "${llista_contenidors_aturats_correctament[@]}"; do
   nom=`basename $d`
+  echo Logs del contenidor $nom engegant-se: >> $LOGSPATH/$DATA.log
+  lxc-start -n $nom -l warn -o $LOGSPATH/$DATA.log
+  echo "${normal}Engegant contenidor ${negreta}$nom${normal}..."
   contenidor=`ps xaf | grep lxc | grep $nom`
-  if [ -z "$contenidor" ] and [espera]; then
+  if [ -n "$contenidor" ]; then
     echo "El contenidor ${negreta}$nom${normal} s'ha engegat correctament"
-  else
-    sleep 1s
-    echo "$espera seg Esperant a les engegades dels contenidors..."
-    let "espera --"
+    llista_contenidors_engegats_correctament[$i]="$nom"
+    let i++
+    else
+    echo "Hi ha hagut algun problema posant en marxa el contenidor ${negreta}$nom${normal}!!"
+    llista_contenidors_error_al_engegar[$j]="$nom"
+    let j++
   fi
 done
 
+for d in "${llista_contenidors_error_al_aturar[@]}"; do
+  nom=`basename $d`
+  echo Logs del contenidor $nom engegant-se: >> $LOGSPATH/$DATA.log
+  lxc-start -n $nom -l warn -o $LOGSPATH/$DATA.log
+  echo "${normal}Engegant contenidor ${negreta}$nom${normal}..."
+  contenidor=`ps xaf | grep lxc | grep $nom`
+  if [ -n "$contenidor" ]; then
+    echo "El contenidor ${negreta}$nom${normal} s'ha engegat correctament"
+    llista_contenidors_engegats_correctament[$i]="$nom"
+    let i++
+    else
+    echo "Hi ha hagut algun problema posant en marxa el contenidor ${negreta}$nom${normal}!!"
+    echo "${negreta}Consultar el fitxer $LOGSPATH/$DATA.log per més informació{normal}"
+    llista_contenidors_error_al_engegar[$j]="$nom"
+    let j++
+  fi
+done
 
 echo
+echo
+echo "${negreta}Resum de les engegades${normal}"
+echo Resum de les engegades >> $LOGSPATH/$DATA.log
+echo "Llista contenidors engegats correctament:${negreta}"
+echo Llista contenidors engegats correctament: >> $LOGSPATH/$DATA.log
+printf '%s\n' "${llista_contenidors_engegats_correctament[*]}"
+printf '%s\n' "${llista_contenidors_engegats_correctament[*]}" >> $LOGSPATH/$DATA.log
+echo "${normal}Llista contenidors no engegats correctament:${negreta}"
+echo Llista contenidors no engegats correctament: >> $LOGSPATH/$DATA.log
+printf '%s\n' "${llista_contenidors_error_al_engegar[*]}"
+printf '%s\n' "${llista_contenidors_error_al_engegar[*]}" >> $LOGSPATH/$DATA.log
+echo
 echo "Procés finalitzat"
-echo "${negreta}Posada en marxa dels contenidors"
-echo "${normal}Engegant contenidors..."
-
