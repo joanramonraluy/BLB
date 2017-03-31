@@ -43,7 +43,7 @@ for d in $LXCDIR/*; do
   fi
   
   nom=`basename $d`
-  contenidor=`ps xaf | grep lxc | grep $nom`
+  contenidor=`ps xaf | grep lxc | grep -w $nom`
   if [ -z "$contenidor" ]; then
     echo "El contenidor ${negreta}$nom${normal} ja estava aturat"
     estat="no_funcionant"
@@ -59,7 +59,7 @@ for d in $LXCDIR/*; do
     echo "Aturant el contenidor ${negreta}$nom...${normal}"
     echo Logs del contenidor $nom al apagar-se: >> $LOGSPATH/$DATA.log
     lxc-stop -n $nom -W -l warn -o $LOGSPATH/$DATA.log
-    contenidor=`ps xaf | grep lxc | grep $nom`
+    contenidor=`ps xaf | grep lxc | grep -w $nom`
     while  [ "$espera" -ge 1 ]; do
         if [ -z "$contenidor" ]; then
           echo "El contenidor ${negreta}$nom${normal} s'ha aturat correctament"
@@ -71,13 +71,13 @@ for d in $LXCDIR/*; do
           sleep 1
           let espera--
         fi  
-        contenidor=`ps xaf | grep lxc | grep $nom`
+        contenidor=`ps xaf | grep lxc | grep -w $nom`
     done      
     if [ -n "$contenidor" ]; then
         echo "${negreta}Forçant l'apagada del contenidor $nom!!"
         echo Logs del contenidor $nom forçat a apagar-se: >> $LOGSPATH/$DATA.log
         lxc-stop -n $nom -t 1 -l info -o $LOGSPATH/$DATA.log
-        contenidor=`ps xaf | grep lxc | grep $nom`
+        contenidor=`ps xaf | grep lxc | grep -w $nom`
         if [ -z "$contenidor" ]; then 
             echo "${negreta}S'ha hagut de forçar l'apagada del contenidor $nom"
             echo "${negreta}Consultar el fitxer $LOGSPATH/$DATA.log per més informació"
@@ -137,7 +137,6 @@ for d in $LXCDIR/*; do
 done
 
 #Fase3: Fem els Backups amb el Borg
-: 'Comentat
 echo
 echo "${negreta}Backups dels contenidors"
 echo "${normal}Creant i enviant les còpies de seguretat..."
@@ -149,7 +148,7 @@ DATA=$(date +%y-%m-%d)
 
 borg create -v --stats --progress $REMOT::$HOST-$DATA $LXCDIR
 borg prune -v --list --keep-daily=7 --keep-weekly=8 --keep-monthly=12 $REMOT
-'
+
 
 #Fase 4: Posada en marxa dels contenidors
 i=0
@@ -163,7 +162,7 @@ for d in "${llista_contenidors_aturats_correctament[@]}"; do
   echo Logs del contenidor $nom engegant-se: >> $LOGSPATH/$DATA.log
   lxc-start -n $nom -l warn -o $LOGSPATH/$DATA.log
   echo "${normal}Engegant contenidor ${negreta}$nom${normal}..."
-  contenidor=`ps xaf | grep lxc | grep $nom`
+  contenidor=`ps xaf | grep lxc | grep -w $nom`
   if [ -n "$contenidor" ]; then
     echo "El contenidor ${negreta}$nom${normal} s'ha engegat correctament"
     llista_contenidors_engegats_correctament[$i]="$nom"
@@ -180,7 +179,7 @@ for d in "${llista_contenidors_error_al_aturar[@]}"; do
   echo Logs del contenidor $nom engegant-se: >> $LOGSPATH/$DATA.log
   lxc-start -n $nom -l warn -o $LOGSPATH/$DATA.log
   echo "${normal}Engegant contenidor ${negreta}$nom${normal}..."
-  contenidor=`ps xaf | grep lxc | grep $nom`
+  contenidor=`ps xaf | grep lxc | grep -w $nom`
   if [ -n "$contenidor" ]; then
     echo "El contenidor ${negreta}$nom${normal} s'ha engegat correctament"
     llista_contenidors_engegats_correctament[$i]="$nom"
